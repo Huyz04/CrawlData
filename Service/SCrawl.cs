@@ -4,98 +4,156 @@ using HtmlAgilityPack;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Playwright;
+using Serilog;
+using System.Configuration;
+using System.Security.Claims;
 
 namespace CrawData.Service
 {
     public class SCrawl
     {
-        private readonly HttpClient _httpClient;
         private readonly DataContext _context;
         public SCrawl(HttpClient httpClient, DataContext context)
         {
-            _httpClient = httpClient;
             _context = context; 
         }
-
         public async Task<List<Paper>> CrawlWebsiteAsync(string url)
         {
-            using var playwright = await Playwright.CreateAsync();
-            await using var browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions { Headless = true });
-            var page = await browser.NewPageAsync();
-            await page.GotoAsync(url);
-
-            // Đợi cho đến khi tất cả các nội dung đã được tải
-            await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
-
-            // Lấy toàn bộ nội dung HTML của trang
-            var content = await page.ContentAsync();
-
-            // Đóng trình duyệt
-            await browser.CloseAsync();
-
-            // Load HTML content using HtmlAgilityPack
-            var htmlDoc = new HtmlDocument();
-            htmlDoc.LoadHtml(content);
-
-            // Select the parent div with class "list__listing-main"
-            var listingMainDiv = htmlDoc.DocumentNode.SelectSingleNode("//div[contains(@class, 'list__listing-main')]");
-            if (listingMainDiv == null)
-            {
-                return new List<Paper>();
-            }
-
-            // Select all child divs with class "box-category-item"
-            var boxCategoryItems = listingMainDiv.SelectNodes(".//div[contains(@class, 'box-category-item')]");
-            if (boxCategoryItems == null)
-            {
-                return new List<Paper>();
-            }
-            var type = new Typee();
-            type = _context.Types.Where(t => t.Content == url).FirstOrDefault();
-            // Extract IDs and div content
             var papers = new List<Paper>();
-            foreach (var item in boxCategoryItems)
+
+            try
             {
-                var hrefNode = item.SelectSingleNode(".//a[contains(@href, '.htm')]");
-                if (hrefNode != null)
+                using var playwright = await Playwright.CreateAsync();
+                await using var browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions { Headless = true });
+                var page = await browser.NewPageAsync();
+                await page.GotoAsync(url, new PageGotoOptions { Timeout = 50000 });
+
+                await page.WaitForLoadStateAsync(LoadState.NetworkIdle, new PageWaitForLoadStateOptions { Timeout = 50000 });
+
+                var content = await page.ContentAsync();
+
+                var htmlDoc = new HtmlDocument();
+                htmlDoc.LoadHtml(content);
+
+                var listingMainDiv = htmlDoc.DocumentNode.SelectSingleNode("//div[contains(@class, 'list__listing-main')]");
+                if (listingMainDiv == null)
                 {
-                    var href = hrefNode.GetAttributeValue("href", string.Empty);
-                    var id = href.Split('-').Last().Replace(".htm", "");
-                    var paper = new Paper
-                    {
-                        Id = id,
-                        Content = item.OuterHtml,
-                        typee = type
-                    };
-                    papers.Add(paper);
+                    return papers;
                 }
+
+                var boxCategoryItems = listingMainDiv.SelectNodes(".//div[contains(@class, 'box-category-item')]");
+                if (boxCategoryItems == null)
+                {
+                    return papers;
+                }
+
+                var type = _context.Types.FirstOrDefault(t => t.Content == url);
+
+                foreach (var item in boxCategoryItems)
+                {
+                    var hrefNode = item.SelectSingleNode(".//a[contains(@href, '.htm')]");
+                    if (hrefNode != null)
+                    {
+                        var href = hrefNode.GetAttributeValue("href", string.Empty);
+                        var id = href.Split('-').Last().Replace(".htm", "");
+                        string urlpaper = "https://tuoitre.vn" + href;
+                        var fullContent = await GetFullContentAsync(browser, urlpaper);
+
+                        var paper = new Paper
+                        {
+                            Id = id,
+                            Content = item.OuterHtml,
+                            FullContent = fullContent,
+                            typee = type
+                        };
+
+                        await SavePaperToDatabase(paper);
+                        papers.Add(paper);
+                        Log.Information($"Crawled paper with ID {id} from URL: {urlpaper}");
+                    }
+                }
+                await browser.CloseAsync();
             }
-            await SavePapersToDatabase(papers);
+            catch (Exception ex)
+            {
+                // Ghi lại các lỗi và tiếp tục
+                Console.WriteLine($"Unexpected error: {ex.Message} for URL: {url}");
+                Log.Error(ex, $"Error crawling website for URL: {url}");
+            }
+
             return papers;
         }
 
-        private string ExtractData(HtmlDocument document)
+        private async Task<string> GetFullContentAsync(IBrowser browser, string url)
         {
-            // Your data extraction logic here
-            // For example, extract all paragraph texts
-            var paragraphs = document.DocumentNode.SelectNodes("//p");
-            var data = string.Join("\n", paragraphs.Select(p => p.InnerText));
-            return data;
-        }
-        private async Task SavePapersToDatabase(List<Paper> papers)
-        {
-            foreach (var paper in papers)
+            try
             {
-                var existingPaper = await _context.Papers.FindAsync(paper.Id);
-                if (existingPaper == null)
+                var httpClient = new HttpClient();
+                var response = await httpClient.GetAsync(url);
+
+                // Kiểm tra mã trạng thái HTTP
+                if (!response.IsSuccessStatusCode)
                 {
-                    _context.Papers.Add(paper);
+                    Console.WriteLine($"Error: Received status code {(int)response.StatusCode} ({response.ReasonPhrase}) for URL: {url}");
+                    Log.Error($"Received status code {(int)response.StatusCode} ({response.ReasonPhrase}) for URL: {url}");
+                    return string.Empty;
                 }
-                else
+
+                var html = await response.Content.ReadAsStringAsync();
+                var doc = new HtmlDocument();
+                doc.LoadHtml(html);
+
+                // Tìm các phần tử cụ thể trong #main-detail
+                var mainDetail = doc.DocumentNode.SelectSingleNode("//*[@id='main-detail']");
+                if (mainDetail != null)
                 {
-                    existingPaper.Content = paper.Content;
-                    _context.Papers.Update(existingPaper);
+                    var detailTop = mainDetail.SelectSingleNode("//div[@class='detail-top']");
+                    var detailTitle = mainDetail.SelectSingleNode("//h1[@class='detail-title article-title']");
+                    var detailSapo = mainDetail.SelectSingleNode("//div[@class='detail-sapo']");
+                    var detailMain = mainDetail.SelectSingleNode("//div[@class='detail-cmain clearfix']");
+
+                    // Kết hợp tất cả các phần tử HTML ngoài được chọn
+                    var combinedHtml = string.Join(Environment.NewLine,
+                        new[] { detailTop, detailTitle, detailSapo, detailMain }
+                            .Where(el => el != null)
+                            .Select(el => el.OuterHtml));
+
+                    // Gói HTML kết hợp vào một <div> mới
+                    var result = $"<div>{combinedHtml}</div>";
+
+                    return result;
                 }
+
+                return string.Empty;
+            }
+            catch (HttpRequestException ex)
+            {
+                // Ghi lại lỗi HTTP và tiếp tục
+                Console.WriteLine($"HTTP request error: {ex.Message} for URL: {url}");
+                Log.Error($"HTTP request error: {ex.Message} for URL: {url}");
+                return string.Empty;
+            }
+            catch (Exception ex)
+            {
+                // Ghi lại các lỗi khác và tiếp tục
+                Console.WriteLine($"Unexpected error: {ex.Message} for URL: {url}");
+                Log.Error(ex, $"Unexpected error for URL: {url}");
+                return string.Empty;
+            }
+        }
+
+        private async Task SavePaperToDatabase(Paper paper)
+        {
+            var existingPaper = await _context.Papers.FindAsync(paper.Id);
+            if (existingPaper == null)
+            {
+                _context.Papers.Add(paper);
+            }
+            else
+            {
+                existingPaper.Content = paper.Content;
+                existingPaper.FullContent = paper.FullContent;
+                _context.Papers.Update(existingPaper);
             }
             await _context.SaveChangesAsync();
         }
