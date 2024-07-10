@@ -1,6 +1,0 @@
-@CrawData_HostAddress = http://localhost:5188
-
-GET {{CrawData_HostAddress}}/weatherforecast/
-Accept: application/json
-
-###
