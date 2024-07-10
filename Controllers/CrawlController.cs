@@ -14,44 +14,18 @@ namespace CrawData.Controllers
         {
             _sCrawl = sCrawl;
         }
-        [HttpGet]
-        public async Task<IActionResult> Crawl([FromQuery] string url)
-        {
-            if (string.IsNullOrWhiteSpace(url))
-            {
-                return BadRequest("URL is required");
-            }
-
-            try
-            {
-                var data = await _sCrawl.CrawlWebsiteAsync(url);
-                return Ok(data);
-            }
-            catch (HttpRequestException)
-            {
-                return StatusCode(500, "Error occurred while fetching data from the website.");
-            }
-        }
         [HttpGet("test")]
         public async Task<IActionResult> CrawlAuto()
         {
-            try
-            {
-                var listLink = await _sCrawl.GetListType();
-                var crawledPapers = new List<Paper>();
+            var listLink = await _sCrawl.GetListType();
 
-                foreach (var type in listLink)
-                {
-                    var papers = await _sCrawl.CrawlWebsiteAsync(type.Content);
-                    crawledPapers.AddRange(papers);
-                }
-
-                return Ok(crawledPapers);
-            }
-            catch (HttpRequestException)
+            foreach (var type in listLink)
             {
-                return StatusCode(500, "Error occurred while fetching data from the website.");
+                var papers = await _sCrawl.CrawlWebsiteAsync(type.Content);
             }
+
+            return Ok("Success");
         }
+
     }
 }

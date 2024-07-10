@@ -14,15 +14,15 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 // Configure Serilog
+
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Information()
     .WriteTo.File(
-        path: Path.Combine("Logs", "log_.txt"), // Specify the directory and log file name
+        path: Path.Combine("Logs", $"log_{DateTime.Now:ddMMyyyy}.txt"), // Log file with current day's date
         outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj}{NewLine}{Exception}",
-        rollingInterval: RollingInterval.Day, //Log will create new files every day
+        rollingInterval: RollingInterval.Day, // Log will create new files every day
         rollOnFileSizeLimit: true)
     .CreateLogger();
-
 // Add Quartz services
 builder.Services.AddQuartz(q =>
 {
