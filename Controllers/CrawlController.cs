@@ -39,7 +39,7 @@ namespace CrawData.Controllers
             {
                 var listLink = await _sCrawl.GetListType();
                 var crawledPapers = new List<Paper>();
-
+                    
                 foreach (var type in listLink)
                 {
                     var papers = await _sCrawl.CrawlWebsiteAsync(type.Content);
