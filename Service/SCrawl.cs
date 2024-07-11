@@ -86,60 +86,72 @@ namespace CrawData.Service
 
         private async Task<string> GetFullContentAsync(IBrowser browser, string url)
         {
-            try
-            {
-                var httpClient = new HttpClient();
-                var response = await httpClient.GetAsync(url);
+            const int maxRetries = 2; // Số lần thử lại tối đa
+            const int delayMilliseconds = 2000; // Thời gian chờ giữa các lần thử lại
 
-                // Kiểm tra mã trạng thái HTTP
-                if (!response.IsSuccessStatusCode)
+            for (int attempt = 1; attempt <= maxRetries; attempt++)
+            {
+                try
                 {
-                    Console.WriteLine($"Error: Received status code {(int)response.StatusCode} ({response.ReasonPhrase}) for URL: {url}");
-                    Log.Error($"Received status code {(int)response.StatusCode} ({response.ReasonPhrase}) for URL: {url}");
+                    var httpClient = new HttpClient();
+                    httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36");
+
+                    var response = await httpClient.GetAsync(url);
+
+                    // Kiểm tra mã trạng thái HTTP
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        Console.WriteLine($"Error: Received status code {(int)response.StatusCode} ({response.ReasonPhrase}) for URL: {url}");
+                        Log.Error($"Received status code {(int)response.StatusCode} ({response.ReasonPhrase}) for URL: {url}");
+                        await Task.Delay(delayMilliseconds); // Thời gian chờ trước khi thử lại
+                        continue; // Thử lại yêu cầu
+                    }
+
+                    var html = await response.Content.ReadAsStringAsync();
+                    var doc = new HtmlDocument();
+                    doc.LoadHtml(html);
+
+                    // Tìm các phần tử cụ thể trong #main-detail
+                    var mainDetail = doc.DocumentNode.SelectSingleNode("//*[@id='main-detail']");
+                    if (mainDetail != null)
+                    {
+                        var detailTop = mainDetail.SelectSingleNode("//div[@class='detail-top']");
+                        var detailTitle = mainDetail.SelectSingleNode("//h1[@class='detail-title article-title']");
+                        var detailSapo = mainDetail.SelectSingleNode("//div[@class='detail-sapo']");
+                        var detailMain = mainDetail.SelectSingleNode("//div[@class='detail-cmain clearfix']");
+
+                        // Kết hợp tất cả các phần tử HTML ngoài được chọn
+                        var combinedHtml = string.Join(Environment.NewLine,
+                            new[] { detailTop, detailTitle, detailSapo, detailMain }
+                                .Where(el => el != null)
+                                .Select(el => el.OuterHtml));
+
+                        // Gói HTML kết hợp vào một <div> mới
+                        var result = $"<div>{combinedHtml}</div>";
+
+                        return result;
+                    }
+
                     return string.Empty;
                 }
-
-                var html = await response.Content.ReadAsStringAsync();
-                var doc = new HtmlDocument();
-                doc.LoadHtml(html);
-
-                // Tìm các phần tử cụ thể trong #main-detail
-                var mainDetail = doc.DocumentNode.SelectSingleNode("//*[@id='main-detail']");
-                if (mainDetail != null)
+                catch (HttpRequestException ex)
                 {
-                    var detailTop = mainDetail.SelectSingleNode("//div[@class='detail-top']");
-                    var detailTitle = mainDetail.SelectSingleNode("//h1[@class='detail-title article-title']");
-                    var detailSapo = mainDetail.SelectSingleNode("//div[@class='detail-sapo']");
-                    var detailMain = mainDetail.SelectSingleNode("//div[@class='detail-cmain clearfix']");
-
-                    // Kết hợp tất cả các phần tử HTML ngoài được chọn
-                    var combinedHtml = string.Join(Environment.NewLine,
-                        new[] { detailTop, detailTitle, detailSapo, detailMain }
-                            .Where(el => el != null)
-                            .Select(el => el.OuterHtml));
-
-                    // Gói HTML kết hợp vào một <div> mới
-                    var result = $"<div>{combinedHtml}</div>";
-
-                    return result;
+                    // Ghi lại lỗi HTTP và tiếp tục
+                    Console.WriteLine($"HTTP request error: {ex.Message} for URL: {url}");
+                    Log.Error($"HTTP request error: {ex.Message} for URL: {url}");
+                    await Task.Delay(delayMilliseconds); // Thời gian chờ trước khi thử lại
                 }
+                catch (Exception ex)
+                {
+                    // Ghi lại các lỗi khác và tiếp tục
+                    Console.WriteLine($"Unexpected error: {ex.Message} for URL: {url}");
+                    Log.Error(ex, $"Unexpected error for URL: {url}");
+                    await Task.Delay(delayMilliseconds); // Thời gian chờ trước khi thử lại
+                }
+            }
 
-                return string.Empty;
-            }
-            catch (HttpRequestException ex)
-            {
-                // Ghi lại lỗi HTTP và tiếp tục
-                Console.WriteLine($"HTTP request error: {ex.Message} for URL: {url}");
-                Log.Error($"HTTP request error: {ex.Message} for URL: {url}");
-                return string.Empty;
-            }
-            catch (Exception ex)
-            {
-                // Ghi lại các lỗi khác và tiếp tục
-                Console.WriteLine($"Unexpected error: {ex.Message} for URL: {url}");
-                Log.Error(ex, $"Unexpected error for URL: {url}");
-                return string.Empty;
-            }
+            // Nếu tất cả các lần thử đều thất bại, trả về chuỗi rỗng
+            return string.Empty;
         }
 
         private async Task SavePaperToDatabase(Paper paper)
