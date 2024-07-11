@@ -29,6 +29,6 @@ namespace CrawData.CronJob
             {
                 _logger.LogError(ex, "CrawlJob failed to call the API at {time}", DateTimeOffset.Now);
             }
-        }
+        } 
     }
 }
