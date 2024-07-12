@@ -6,7 +6,11 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Playwright;
 using Serilog;
 using System.Configuration;
+using System.Drawing.Printing;
 using System.Security.Claims;
+using System.Linq;
+using Microsoft.AspNetCore.Mvc.RazorPages;
+using static Microsoft.EntityFrameworkCore.DbLoggerCategory;
 
 namespace CrawData.Service
 {
@@ -178,6 +182,39 @@ namespace CrawData.Service
         public async Task<List<Typee>> GetListType()
         {
             return await _context.Types.ToListAsync();
+        }
+
+        public async Task<IEnumerable<string>> GetPaperByType(int typeId, int page)
+        {
+            var papers = await _context.Papers
+                                       .Include(p => p.typee)
+                                       .Where(p => p.typee.Id == typeId)
+                                       .Select(p=>p.Content)
+                                        .Skip((page - 1) * 10)
+                                        .Take(10)
+                                       .ToListAsync();
+
+            if (papers == null || papers.Count == 0)
+            {
+                return null;
+            }
+
+            return papers;
+        }
+
+        public async Task<string> GetPaperFullContent(string paperId)
+        {
+            var paper = await _context.Papers
+                .Where(p => p.Id == paperId).
+                Select(paper=>paper.FullContent)
+                .FirstOrDefaultAsync();
+
+            if(paper == null)
+            {
+                return null;
+            }
+          
+            return paper;
         }
     }
 }
