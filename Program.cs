@@ -4,6 +4,7 @@ using CrawData.Service;
 using Microsoft.EntityFrameworkCore;
 using Quartz;
 using Serilog;
+using CrawData.Responses;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -50,8 +51,14 @@ builder.Services.AddDbContext<DataContext>(option =>
       throw new InvalidOperationException("Connection String is not found"));
 });
 
+
+builder.Services.AddAutoMapper(AppDomain.CurrentDomain.GetAssemblies());
+
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<SCrawl>();
+builder.Services.AddScoped<ResponseListPaper>();
+builder.Services.AddScoped<ResponsePaper>();
+builder.Services.AddScoped<ResponseListPaperWithType>();
 
 var app = builder.Build();
 

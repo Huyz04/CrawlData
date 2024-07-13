@@ -12,15 +12,19 @@ using System.Linq;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using static Microsoft.EntityFrameworkCore.DbLoggerCategory;
 using CrawData.Responses;
+using AutoMapper;
+using CrawData.DTO;
 
 namespace CrawData.Service
 {
     public class SCrawl
     {
         private readonly DataContext _context;
-        public SCrawl(HttpClient httpClient, DataContext context)
+        private readonly IMapper _mapper;
+        public SCrawl(HttpClient httpClient, DataContext context, IMapper mapper)
         {
-            _context = context; 
+            _context = context;
+            _mapper = mapper;
         }
         public async Task<List<Paper>> CrawlWebsiteAsync(string url)
         {
@@ -198,7 +202,6 @@ namespace CrawData.Service
             var papers = await _context.Papers
                                        .Include(p => p.typee)
                                        .Where(p => p.typee.Id == typeId)
-                                       .Select(p=>p.Content)
                                         .Skip((page - 1) * 10)
                                         .Take(10)
                                        .ToListAsync();
@@ -213,7 +216,7 @@ namespace CrawData.Service
             //IEnumerable<string> result = new List<string>(papers);
             R.Success = true;
             R.Message = "Success!";
-            R.data.Collection = papers;
+            R.data.Collection = _mapper.Map<IEnumerable<PaperSummaryDTO>>(papers);
             R.data.Total = papers.Count();
             R.data.PageIndex = 1;
             return R;
@@ -224,8 +227,7 @@ namespace CrawData.Service
             var R = new ResponsePaper();
 
             var paper = await _context.Papers
-                .Where(p => p.Id == paperId).
-                Select(paper=>paper.FullContent)
+                .Where(p => p.Id == paperId)
                 .FirstOrDefaultAsync();
 
             if(paper == null)
@@ -235,7 +237,7 @@ namespace CrawData.Service
                 return R;
             }
 
-            string result = new string(paper);
+            string result = _mapper.Map<FullContentPaperDTO>(paper).FullContent;
             R.Success = true;
             R.Message = "Success!";
             R.data = result;

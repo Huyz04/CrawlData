@@ -1,14 +1,15 @@
-﻿using CrawData.Model;
+﻿using CrawData.DTO;
+using CrawData.Model;
 
 namespace CrawData.Responses
 {
     public class ResponseListPaperWithType
     {
-        public IEnumerable<string> Collection { get; set; }
+        public IEnumerable<PaperSummaryDTO> Collection { get; set; }
         public int Total { get; set; }
         public int PageSize { get; set; }
         public int PageIndex { get; set; }
-        public ResponseListPaperWithType(IEnumerable<string> papers, int total = 0, int pageindex = 0)
+        public ResponseListPaperWithType(IEnumerable<PaperSummaryDTO> papers, int total = 0, int pageindex = 0)
         {
             this.Collection = papers;
             this.Total = total;
@@ -17,7 +18,7 @@ namespace CrawData.Responses
         }
         public ResponseListPaperWithType()
         {
-            this.Collection = new List<string>();
+            this.Collection = new List<PaperSummaryDTO>();
             this.Total = 0;
             this.PageSize = 0;
             this.PageIndex = 0;

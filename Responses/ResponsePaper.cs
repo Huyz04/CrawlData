@@ -1,4 +1,6 @@
-﻿namespace CrawData.Responses
+﻿using CrawData.DTO;
+
+namespace CrawData.Responses
 {
     public class ResponsePaper
     {
