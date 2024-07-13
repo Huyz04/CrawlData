@@ -2,6 +2,7 @@
 using CrawData.Service;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using CrawData.Responses;
 
 namespace CrawData.Controllers
 {
@@ -28,26 +29,15 @@ namespace CrawData.Controllers
         }
 
         [HttpGet("{typeId}/{page}")]
-        public async Task<IActionResult> GetPapersFindPage(int typeId, int page)
+        public async Task<ActionResult<ResponseListPaper>> GetPapersFindPage(int typeId, int page)
         {
-            if(page<=0) return BadRequest();
-            var papers = await _sCrawl.GetPaperByType(typeId, page);
-            if(papers == null)
-            {
-                return NotFound();
-            }
-            return Ok(papers);
+            return await _sCrawl.GetPaperByType(typeId, page);
         }
 
         [HttpGet("{paperId}")]
-        public async Task<IActionResult> GetPaperFullContent(string paperId)
+        public async Task<ActionResult<ResponsePaper>> GetPaperFullContent(string paperId)
         {
-            var paper = await _sCrawl.GetPaperFullContent(paperId);
-            if(paper == null)
-            {
-                return NotFound();
-            }
-            return Ok(paper);
+            return await _sCrawl.GetPaperFullContent(paperId);
         }
     }
 }

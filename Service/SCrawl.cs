@@ -11,6 +11,7 @@ using System.Security.Claims;
 using System.Linq;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using static Microsoft.EntityFrameworkCore.DbLoggerCategory;
+using CrawData.Responses;
 
 namespace CrawData.Service
 {
@@ -184,8 +185,16 @@ namespace CrawData.Service
             return await _context.Types.ToListAsync();
         }
 
-        public async Task<IEnumerable<string>> GetPaperByType(int typeId, int page)
+        public async Task<ActionResult<ResponseListPaper>> GetPaperByType(int typeId, int page)
         {
+            var R = new ResponseListPaper();
+            if (page < 0)
+            {
+                R.Success = false;
+                R.data.Total = 0;
+                R.Message = "Bad Request!";
+                return R;
+            }
             var papers = await _context.Papers
                                        .Include(p => p.typee)
                                        .Where(p => p.typee.Id == typeId)
@@ -194,16 +203,26 @@ namespace CrawData.Service
                                         .Take(10)
                                        .ToListAsync();
 
-            if (papers == null || papers.Count == 0)
+            if (papers == null)
             {
-                return null;
+                R.Success = false;
+                R.data.Total = 0;
+                R.Message = "Not Found!";
+                return R;
             }
-
-            return papers;
+            //IEnumerable<string> result = new List<string>(papers);
+            R.Success = true;
+            R.Message = "Success!";
+            R.data.Collection = papers;
+            R.data.Total = papers.Count();
+            R.data.PageIndex = 1;
+            return R;
         }
 
-        public async Task<string> GetPaperFullContent(string paperId)
+        public async Task<ActionResult<ResponsePaper>> GetPaperFullContent(string paperId)
         {
+            var R = new ResponsePaper();
+
             var paper = await _context.Papers
                 .Where(p => p.Id == paperId).
                 Select(paper=>paper.FullContent)
@@ -211,10 +230,16 @@ namespace CrawData.Service
 
             if(paper == null)
             {
-                return null;
+                R.Success = false;
+                R.Message = "Not Found!";
+                return R;
             }
-          
-            return paper;
+
+            string result = new string(paper);
+            R.Success = true;
+            R.Message = "Success!";
+            R.data = result;
+            return R;
         }
     }
 }
